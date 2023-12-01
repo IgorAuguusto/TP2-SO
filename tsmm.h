@@ -9,6 +9,12 @@
 #define EMPTY_LINE "\n\n"
 #define TAB '\t'
 
+// Unidade de tempo: equivale à 1 instrução da tarefa.
+#define UT 1
+
+// Fatia de tempo (quantum) = 2ut (unidades de tempo).
+#define QUANTUM 2
+
 // Define o número de tarefas realizadas pelo programa.
 #define NUMBER_OF_TASKS 4
 
@@ -39,7 +45,7 @@ typedef char String[STRING_DEFAULT_SIZE];
 // Nome do arquivo.
 typedef char FileName[FILE_NAME_SIZE];
 
-// Tipo 
+// Tipo lógico
 typedef int boolean;
 
 // Indica o estado atual da tarefa. 
@@ -98,15 +104,17 @@ typedef struct {
     // Representa o contador de preempção por tempo (Quantum)
     TimeUnit preemptionTimeCounter;
 
-    // Matriz que representa o 'clock' (UT) em que cada programa entrou (NOVA -> PRONTA) e saiu (TERMINADA) da fila do processador.
+    // Matriz que representa o 'clock' (UT) em que cada programa entrou (PRONTA) e saiu (TERMINADA) da fila do processador.
     TimeUnit entryAndExitTimesQueue[NUMBER_OF_TASKS][2];
 } RoundRobin;
 
 // Definição da estrutura do nó da fila
+// Alterando a estrutura TaskDescriptorNode para armazenar um ponteiro para TaskDescriptor
 typedef struct TaskDescriptorNode {
-    TaskDescriptor taskDescriptor;
+    TaskDescriptor* taskDescriptorPtr;
     struct TaskDescriptorNode* next;
 } TaskDescriptorNode;
+
 
 // Definição da estrutura da fila
 typedef struct {
@@ -117,6 +125,27 @@ typedef struct {
 // Protótipos das funções para manipulação da fila
 TaskDescriptorQueue* createTaskDescriptorQueue();
 int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue);
-void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor taskDesc);
-TaskDescriptor dequeueTaskDescriptor(TaskDescriptorQueue* queue);
+void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr);
+TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue);
 void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue);
+
+// Verifica se todas as tarefas na lista têm o status FINISHED
+boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks);
+
+// Escalona as tarefas para execução
+void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks);
+
+// Verifica se uma string corresponde a um padrão de expressão regular
+boolean matchRegex(String string, const char *pattern);
+
+// Valida se um arquivo segue o padrão de instruções
+boolean validateFile(FileName fileName);
+
+// Valida o número de argumentos passados para o programa
+boolean validateNumberOfArguments(int numberOfArguments);
+
+// Inicializa os atributos de um descritor de tarefa
+void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName);
+
+// Função principal que inicia o processamento das tarefas
+int tsmm(int numberOfArguments, char *arguments[]);

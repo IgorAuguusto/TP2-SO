@@ -17,35 +17,36 @@ int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue) {
 }//isTaskDescriptorQueueEmpty()
 
 // Função para enfileirar um elemento na fila
-void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor taskDesc) {
+void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr) {
     TaskDescriptorNode* newNode = (TaskDescriptorNode*)malloc(sizeof(TaskDescriptorNode));
-    newNode->taskDescriptor = taskDesc;
+    newNode->taskDescriptorPtr = taskDescPtr;
     newNode->next = NULL;
 
     if (isTaskDescriptorQueueEmpty(queue)) {
         queue->front = queue->rear = newNode;
-    } else {
+    } 
+    else {
         queue->rear->next = newNode;
         queue->rear = newNode;
     }
 }//enqueueTaskDescriptor()
 
+//enqueueTaskDescriptor()
+
 // Função para desenfileirar um elemento da fila
-TaskDescriptor dequeueTaskDescriptor(TaskDescriptorQueue* queue) {
+TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue) {
     if (isTaskDescriptorQueueEmpty(queue)) {
-        printf("A fila está vazia.\n");
-        TaskDescriptor emptyTaskDesc = {0}; 
-        return emptyTaskDesc;
+        return NULL;
     }
 
-    TaskDescriptor taskDesc = queue->front->taskDescriptor;
     TaskDescriptorNode* temp = queue->front;
-
     queue->front = queue->front->next;
+    TaskDescriptor* result = temp->taskDescriptorPtr;
     free(temp);
 
-    return taskDesc;
+    return result;
 }//dequeueTaskDescriptor()
+
 
 // Função para liberar a memória alocada para a fila
 void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue) {
@@ -56,18 +57,40 @@ void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue) {
 }//destroyTaskDescriptorQueue()
 
 // Função para verificar se todos os nodos na fila têm o status FINISHED
-int allTasksFinished(TaskDescriptorQueue* queue) {
-    TaskDescriptorNode* current = queue->front;
-
-    while (current != NULL) {
-        if (current->taskDescriptor.status != FINISHED) {
+boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks) {
+    
+    for (int i = 0; i < numberOfTasks; i++) {
+        if (tasks[i].status ==  FINISHED) {
             return FALSE;
         }
-        current = current->next;
-    }
+    } 
     return TRUE;
 }//allTasksFinished()
 
+void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
+    RoundRobin roudRobin;
+    roudRobin.totalCPUClocks = 0;
+    roudRobin.preemptionTimeCounter = 0;
+
+    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue();
+    for (int i = 0; i < numberOfTasks; i++) {
+        enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
+    }   
+
+    while (TRUE) {
+        // Verifica se há tarefas aptas à serem escalonadas (estado diferente de TERMINADA); 
+        if (allTasksFinished(tasks, numberOfTasks)) {
+            destroyTaskDescriptorQueue(taskDescriptorQueue);
+            break;
+        }
+
+        TaskDescriptor* taskRunningPtr = dequeueTaskDescriptor(taskDescriptorQueue);
+
+        if (taskRunningPtr != NULL) {
+            //executeTask(&roudRobin, taskRunningPtr);
+        }
+    }
+}//scheduleTasks()
 
 boolean matchRegex(String string, const char *pattern) {
     regex_t regex;
@@ -90,7 +113,7 @@ boolean matchRegex(String string, const char *pattern) {
     else {
         return FALSE; 
     }
-}//matchRegex
+}//matchRegex()
 
 boolean validateFile(FileName fileName) {
     FileName fullFileName;
@@ -103,7 +126,6 @@ boolean validateFile(FileName fileName) {
         return FALSE;
     }
     String line;
-    int lineNumber = 0;
 
     if (fgets(line, sizeof(line), file) != NULL) {
         if (!matchRegex(line, INSTRUCTION_HEADER_REGEX)) {
@@ -128,27 +150,27 @@ boolean validateNumberOfArguments(int numberOfArguments) {
     return TRUE;
 }//validateNumberOfArguments()
 
-void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
-    RoundRobin roudRobin;
-    roudRobin.totalCPUClocks = 0;
-    roudRobin.preemptionTimeCounter = 0;
+void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName) {
+    // Inicializa todos os atributos com 0
+    memset(descriptor, 0, sizeof(TaskDescriptor));
 
-    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue();
-    for (int i = 0; i < numberOfTasks; i++) {
-        enqueueTaskDescriptor(taskDescriptorQueue, tasks[0]);
-    }   
+    strcpy(descriptor->task.nameOfTask, taskName);
+    FileName fullFileName;
+    snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", taskName, FILE_EXTENSION);
+    descriptor->task.taskFile = fopen(fullFileName, "r");
+    descriptor->status = READY;
 
-    while(TRUE) {
-        
-        if(allTasksFinished(taskDescriptorQueue)) break;     
-        
-
+    // Inicializa as variáveis da tarefa com 0
+    for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; ++i) {
+        memset(descriptor->variable[i].name, 0, STRING_DEFAULT_SIZE);
+        descriptor->variable[i].value = 0;
     }
-}//scheduleTasks
+}//initializeTaskDescriptor()
+
 
 int tsmm(int numberOfArguments, char *arguments[]) {
     if (!validateNumberOfArguments(numberOfArguments)) {
-        perror("Programa finalizado, argumendos inválidos");
+        perror("Programa finalizado, argumentos inválidos");
         exit(0);
     }
 
@@ -158,11 +180,7 @@ int tsmm(int numberOfArguments, char *arguments[]) {
             printf("\nError Arquivo %s\n", arguments[i]);
         }
         else {
-            FileName fullFileName;
-            snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", arguments[i], FILE_EXTENSION);
-            tasksDescriptions[--i].task.taskFile = fopen(fullFileName, "r");
-            tasksDescriptions[--i].status = READY;
-            strcpy(tasksDescriptions[--i].task.nameOfTask, arguments[0]);
+            initializeTaskDescriptor(&tasksDescriptions[i - 1], arguments[0]);
         }
     }
     scheduleTasks(tasksDescriptions, numberOfArguments - 1);
@@ -172,4 +190,4 @@ int tsmm(int numberOfArguments, char *arguments[]) {
 
 int main(int argc, char *argv[]) {
     return tsmm(argc, argv);
-}//main
+}//main()
