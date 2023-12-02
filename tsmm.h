@@ -18,6 +18,9 @@
 // Define o número de tarefas realizadas pelo programa.
 #define NUMBER_OF_TASKS 4
 
+// Tempo de suspensão da tarefa
+#define SUSPENDED_TIME 5
+
 // Número máximo de instruções da tarefa.
 #define MAXIMUM_NUMBER_OF_INSTRUCTIONS 64
 
@@ -86,6 +89,12 @@ typedef struct {
     // Tempo de Cpu
     unsigned short cpuTime;
 
+    // Variavel para controlar o tempo em que a terefa fica suspensa
+    unsigned short suspendedTime;
+
+    // Variavel de controle para saber se a terafa foi abortada
+    boolean aborted;
+
     // Tempo de Entrada e Saida
     unsigned short inputOutputTime;
 
@@ -103,9 +112,6 @@ typedef struct {
 
     // Representa o contador de preempção por tempo (Quantum)
     TimeUnit preemptionTimeCounter;
-
-    // Matriz que representa o 'clock' (UT) em que cada programa entrou (PRONTA) e saiu (TERMINADA) da fila do processador.
-    TimeUnit entryAndExitTimesQueue[NUMBER_OF_TASKS][2];
 } RoundRobin;
 
 // Definição da estrutura do nó da fila
@@ -122,7 +128,7 @@ typedef struct {
     TaskDescriptorNode* rear; 
 } TaskDescriptorQueue;
 
-// Protótipos das funções para manipulação da fila
+// Funções para manipulação da fila
 TaskDescriptorQueue* createTaskDescriptorQueue();
 int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue);
 void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr);
