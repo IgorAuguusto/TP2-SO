@@ -56,30 +56,38 @@ void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue) {
 
 // Função para verificar se todas as tarefas têm o status FINISHED
 boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks) {
-    
     for (int i = 0; i < numberOfTasks; i++) {
         if (tasks[i].status ==  FINISHED) {
+            printf("Task %s IS finished.\n", tasks[i].task.nameOfTask);
+        }
+        else {
+            printf("Task %s IS READY.\n", tasks[i].task.nameOfTask);
             return FALSE;
         }
     } 
+    printf("All tasks are finished.\n");
     return TRUE;
-}//allTasksFinished()
+}
 
 void readDisk(TaskDescriptor* taskDescriptor) {
+    printf("Reading disk for task %s...\n", taskDescriptor->task.nameOfTask);
     taskDescriptor->status = SUSPENDED;
     taskDescriptor->suspendedTime += SUSPENDED_TIME;
-    taskDescriptor->inputOutputTime += SUSPENDED_TIME; 
-}//readDisk()
+    taskDescriptor->inputOutputTime += SUSPENDED_TIME;
+    printf("Read disk completed for task %s.\n", taskDescriptor->task.nameOfTask);
+}
 
 boolean new(String instruction, TaskDescriptor* taskDescriptor) {
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
         if (strlen(taskDescriptor->variable[i].name) == 0) {
             sscanf(instruction, "%s new %d", taskDescriptor->variable[i].name, &taskDescriptor->variable[i].value);
+            printf("Created new variable for task %s.\n", taskDescriptor->task.nameOfTask);
             return TRUE;
         }
     }
+    printf("Failed to create new variable. Maximum number reached.\n");
     return FALSE;
-}//new()
+}
 
 boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor) {
     String identifier;
@@ -88,68 +96,122 @@ boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor) {
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
         if (strcmp(taskDescriptor->variable[i].name, identifier) == 0) {
             if (value >= taskDescriptor->variable[i].value) {
+                printf("Error in instruction: %s\n", instruction);
+                fclose(taskDescriptor->task.taskFile);
+                taskDescriptor->status = FINISHED;
                 taskDescriptor->aborted = TRUE;
                 return FALSE;
-            }
-            else {
+            } else {
+                printf("Memory accessed successfully.\n");
                 return TRUE;
             }
         }
     }
+    fclose(taskDescriptor->task.taskFile);
+    taskDescriptor->status = FINISHED;
     taskDescriptor->aborted = TRUE;
+    printf("Failed to access memory.  File closed, %s.\n", taskDescriptor->task.nameOfTask);
     return FALSE;
-}//memoryAccess()
+}
 
-boolean executeTask(RoundRobin* roundRobin, TaskDescriptor* taskDescriptor) {
-    
-    while (roundRobin->preemptionTimeCounter < QUANTUM) {
-        String instruction;
-        if (fgets(instruction, sizeof(instruction), taskDescriptor->task.taskFile) != NULL) {
-            if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
-                new(instruction, taskDescriptor);
-            }   
-            else if (matchRegex(instruction, INSTRUCTION_IDEX_REGEX)) {
-                memoryAccess(instruction, taskDescriptor);
+void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks) {
+    for (int i = 0; i < numberOfTasks; i++) {
+        if (tasks[i].status == SUSPENDED) {
+            printf("Task %s suspended time: %d\n", tasks[i].task.nameOfTask, tasks[i].suspendedTime); // Adicionado para verificar o tempo de suspensão
+            tasks[i].suspendedTime--;
+            if (tasks[i].suspendedTime == 0) {
+                tasks[i].status = READY;
+                enqueueTaskDescriptor(queue, &tasks[i]);
+                printf("Task %s is now ready.\n", tasks[i].task.nameOfTask);
             }
-            else {
-                readDisk(taskDescriptor);
+        }
+    }
+}
+
+boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks) {
+    while (roundRobin->preemptionTimeCounter < QUANTUM) {
+        checkAndUpdateSuspendedTasks(queue, tasks, numberOfTasks);
+
+        if (taskDescriptor != NULL && taskDescriptor->status == RUNNING) {
+            String instruction;
+            if (fgets(instruction, sizeof(instruction), taskDescriptor->task.taskFile) != NULL) {
+                printf("Task %s is in status %d\n", taskDescriptor->task.nameOfTask, taskDescriptor->status);
+                printf("Instruction read: %s\n", instruction);
+                roundRobin->totalCPUClocks++;
+                taskDescriptor->cpuTime++;
+                printf("Checking instructions for task %s\n", taskDescriptor->task.nameOfTask);
+
+                if (matchRegex(instruction, INSTRUCTION_HEADER_REGEX)) {
+                    
+                }
+                if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
+                    new(instruction, taskDescriptor);
+                } else if (matchRegex(instruction, INSTRUCTION_IDEX_REGEX)) {
+                    memoryAccess(instruction, taskDescriptor);
+                } else if (matchRegex(instruction, INSTRUCTION_READ_DISK_REGEX)) {
+                    readDisk(taskDescriptor);
+                    break;
+                }
+            } else {
+                taskDescriptor->status = FINISHED;
+                fclose(taskDescriptor->task.taskFile);
+                printf("Task finished. File closed, %s.\n", taskDescriptor->task.nameOfTask);
                 break;
             }
         }
-        else {
-            taskDescriptor->status = FINISHED;
-            fclose(taskDescriptor->task.taskFile);
-            break;
-        }
+        roundRobin->preemptionTimeCounter += UT;
     }
-    
     return TRUE;
-}//executeTask()
+}
+
 
 void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
     RoundRobin roudRobin;
     roudRobin.totalCPUClocks = 0;
     roudRobin.preemptionTimeCounter = 0;
 
-    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue();
-    for (int i = 0; i < numberOfTasks; i++) {
-        enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
-    }   
+    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
+
+    for (int i = 0; i < numberOfTasks; i ++) {
+        if (tasks[i].status == READY) {
+            enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
+            printf("Task %d enqueued.\n", i);
+        }
+    }
 
     while (TRUE) {
-        // Verifica se há tarefas aptas à serem escalonadas (estado diferente de TERMINADA); 
+
         if (allTasksFinished(tasks, numberOfTasks)) {
             destroyTaskDescriptorQueue(taskDescriptorQueue);
+            printf("All tasks have finished.\n");
             break;
         }
 
         TaskDescriptor* taskRunningPtr = dequeueTaskDescriptor(taskDescriptorQueue);
-
+        
         if (taskRunningPtr != NULL) {
-            executeTask(&roudRobin, taskRunningPtr);
+            printf("\nOI\n");
+            taskRunningPtr->status = RUNNING;
         }
+        executeTask(taskDescriptorQueue, &roudRobin, taskRunningPtr, tasks, numberOfTasks);
+        
+        if (taskRunningPtr->status == RUNNING) {
+            taskRunningPtr->status = READY;
+            enqueueTaskDescriptor(taskDescriptorQueue, taskRunningPtr);
+        }
+
+        roudRobin.preemptionTimeCounter = 0;
     }
-}//scheduleTasks()
+
+    for (int i = 0; i < numberOfTasks; i ++) {
+        printf("\n\tNome %s", tasks[i].task.nameOfTask);
+        printf("\n\tStatus %d", tasks[i].status);
+        printf("\n\tAbortada %d", tasks[i].aborted);
+        printf("\n\tTempo de Cpu %d", tasks[i].cpuTime);
+        printf("\n\tTempo de entrada e saida %d\n\n", tasks[i].inputOutputTime);
+    }
+}
+
 
 boolean matchRegex(String string, const char *pattern) {
     regex_t regex;
@@ -173,6 +235,30 @@ boolean matchRegex(String string, const char *pattern) {
         return FALSE; 
     }
 }//matchRegex()
+
+boolean validateNumberOfArguments(int numberOfArguments) {
+    if (numberOfArguments < 2 || numberOfArguments > NUMBER_OF_TASKS + 1) {
+        return FALSE;
+    }
+    return TRUE;
+}//validateNumberOfArguments()
+
+void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName) {
+    // Inicializa todos os atributos com 0
+    memset(descriptor, 0, sizeof(TaskDescriptor));
+
+    strcpy(descriptor->task.nameOfTask, taskName);
+    FileName fullFileName;
+    snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", taskName, FILE_EXTENSION);
+    descriptor->task.taskFile = fopen(fullFileName, "r");
+    descriptor->status = READY;
+
+    // Inicializa as variáveis da tarefa com 0
+    for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; ++i) {
+        memset(descriptor->variable[i].name, 0, STRING_DEFAULT_SIZE);
+        descriptor->variable[i].value = 0;
+    }
+}//initializeTaskDescriptor()
 
 boolean validateFile(FileName fileName) {
     FileName fullFileName;
@@ -201,31 +287,6 @@ boolean validateFile(FileName fileName) {
     fclose(file);
     return TRUE;
 }//validateFile()
-
-boolean validateNumberOfArguments(int numberOfArguments) {
-    if (numberOfArguments < 2 || numberOfArguments > NUMBER_OF_TASKS + 1) {
-        return FALSE;
-    }
-    return TRUE;
-}//validateNumberOfArguments()
-
-void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName) {
-    // Inicializa todos os atributos com 0
-    memset(descriptor, 0, sizeof(TaskDescriptor));
-
-    strcpy(descriptor->task.nameOfTask, taskName);
-    FileName fullFileName;
-    snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", taskName, FILE_EXTENSION);
-    descriptor->task.taskFile = fopen(fullFileName, "r");
-    descriptor->status = READY;
-
-    // Inicializa as variáveis da tarefa com 0
-    for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; ++i) {
-        memset(descriptor->variable[i].name, 0, STRING_DEFAULT_SIZE);
-        descriptor->variable[i].value = 0;
-    }
-}//initializeTaskDescriptor()
-
 
 int tsmm(int numberOfArguments, char *arguments[]) {
     if (!validateNumberOfArguments(numberOfArguments)) {
