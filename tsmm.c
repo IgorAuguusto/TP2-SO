@@ -88,19 +88,23 @@ boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor) {
         if (strcmp(taskDescriptor->variable[i].name, identifier) == 0) {
             if (value >= taskDescriptor->variable[i].value) {
                 printf("Error in instruction: %s\n", instruction);
-                fclose(taskDescriptor->task.taskFile);
-                taskDescriptor->status = FINISHED;
-                taskDescriptor->aborted = TRUE;
+                finishTask(taskDescriptor, TRUE);
                 return FALSE;
             } else {
                 return TRUE;
             }
         }
     }
+    finishTask(taskDescriptor, TRUE);
+    return FALSE;
+}
+
+void finishTask(TaskDescriptor* taskDescriptor, boolean aborted) {
     fclose(taskDescriptor->task.taskFile);
     taskDescriptor->status = FINISHED;
-    taskDescriptor->aborted = TRUE;
-    return FALSE;
+    if (aborted) {
+        taskDescriptor->aborted = TRUE;
+    }
 }
 
 void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks) {
@@ -128,7 +132,7 @@ boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDesc
                 if (matchRegex(instruction, INSTRUCTION_HEADER_REGEX)) {
                     
                 }
-                if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
+                else if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
                     new(instruction, taskDescriptor);
                 } else if (matchRegex(instruction, INSTRUCTION_IDEX_REGEX)) {
                     memoryAccess(instruction, taskDescriptor);
@@ -137,8 +141,7 @@ boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDesc
                     break;
                 }
             } else {
-                taskDescriptor->status = FINISHED;
-                fclose(taskDescriptor->task.taskFile);
+                finishTask(taskDescriptor, FALSE);
                 break;
             }
         }
@@ -152,11 +155,10 @@ void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
     RoundRobin roudRobin;
     roudRobin.totalCPUClocks = 0;
     roudRobin.preemptionTimeCounter = 0;
-
     TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
 
     for (int i = 0; i < numberOfTasks; i ++) {
-        if (tasks[i].status == READY) {
+        if (tasks[i].status == READY && tasks[i].aborted == FALSE) {
             enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
         }
     }
@@ -167,12 +169,13 @@ void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
             destroyTaskDescriptorQueue(taskDescriptorQueue);
             break;
         }
-
-        TaskDescriptor* taskRunningPtr = dequeueTaskDescriptor(taskDescriptorQueue);
         
+        TaskDescriptor* taskRunningPtr = dequeueTaskDescriptor(taskDescriptorQueue);
+
         if (taskRunningPtr != NULL) {
             taskRunningPtr->status = RUNNING;
         }
+        
         executeTask(taskDescriptorQueue, &roudRobin, taskRunningPtr, tasks, numberOfTasks);
         
         if (taskRunningPtr != NULL && taskRunningPtr->status == RUNNING) {
@@ -204,7 +207,7 @@ boolean matchRegex(String string, const char *pattern) {
         fprintf(stderr, "Erro ao compilar a expressão regular: %s\n", error_message);
         return FALSE;
     }
-
+    
     result = regexec(&regex, string, 0, NULL, 0);
     regfree(&regex);
 
@@ -232,6 +235,7 @@ void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName) {
     snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", taskName, FILE_EXTENSION);
     descriptor->task.taskFile = fopen(fullFileName, "r");
     descriptor->status = READY;
+    descriptor->aborted = FALSE;
 
     // Inicializa as variáveis da tarefa com 0
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; ++i) {
@@ -278,6 +282,8 @@ int tsmm(int numberOfArguments, char *arguments[]) {
     for (int i = 1; i < numberOfArguments; i++) {
         if (!validateFile(arguments[i])) {
             printf("\nError Arquivo %s\n", arguments[i]);
+            tasksDescriptions[i - 1].aborted = TRUE;
+            tasksDescriptions[i - 1].status = FINISHED;
         }
         else {
             initializeTaskDescriptor(&tasksDescriptions[i - 1], arguments[i]);

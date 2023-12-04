@@ -13,7 +13,7 @@
 #define UT 1
 
 // Fatia de tempo (quantum) = 2ut (unidades de tempo).
-#define QUANTUM 2
+#define QUANTUM (2 * UT)
 
 // Define o número de tarefas realizadas pelo programa.
 #define NUMBER_OF_TASKS 4
@@ -154,6 +154,9 @@ boolean new(String instruction, TaskDescriptor* taskDescriptor);
 
 // Função para acessar a memória de uma tarefa
 boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor);
+
+// Função para finalizar uma tarefa
+void finishTask(TaskDescriptor* taskDescriptor, boolean aborted);
 
 // Função para verificar e atualizar as tarefas suspensas
 void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks);
