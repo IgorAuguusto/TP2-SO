@@ -128,30 +128,56 @@ typedef struct {
     TaskDescriptorNode* rear; 
 } TaskDescriptorQueue;
 
-// Funções para manipulação da fila
+// Função para criar uma fila vazia de descritores de tarefas
 TaskDescriptorQueue* createTaskDescriptorQueue();
+
+// Função para verificar se a fila de descritores de tarefas está vazia
 int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue);
+
+// Função para enfileirar um elemento na fila de descritores de tarefas
 void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr);
+
+// Função para desenfileirar um elemento da fila de descritores de tarefas
 TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue);
+
+// Função para liberar a memória alocada para a fila de descritores de tarefas
 void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue);
 
-// Verifica se todas as tarefas na lista têm o status FINISHED
+// Função para verificar se todas as tarefas têm o status FINISHED
 boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks);
 
-// Escalona as tarefas para execução
+// Função para realizar a leitura de disco para uma tarefa
+void readDisk(TaskDescriptor* taskDescriptor);
+
+// Função para criar uma nova variável para uma tarefa
+boolean new(String instruction, TaskDescriptor* taskDescriptor);
+
+// Função para acessar a memória de uma tarefa
+boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor);
+
+// Função para verificar e atualizar as tarefas suspensas
+void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks);
+
+// Função para executar a lógica da tarefa
+boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks);
+
+// Função para agendar e executar as tarefas
 void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks);
 
-// Verifica se uma string corresponde a um padrão de expressão regular
+// Função para verificar se uma string corresponde a um padrão regex
 boolean matchRegex(String string, const char *pattern);
 
-// Valida se um arquivo segue o padrão de instruções
-boolean validateFile(FileName fileName);
-
-// Valida o número de argumentos passados para o programa
+// Função para validar o número de argumentos passados para o programa
 boolean validateNumberOfArguments(int numberOfArguments);
 
-// Inicializa os atributos de um descritor de tarefa
+// Função para inicializar o descritor de tarefa
 void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName);
 
-// Função principal que inicia o processamento das tarefas
+// Função para validar um arquivo de tarefa
+boolean validateFile(FileName fileName);
+
+// Função principal do programa
 int tsmm(int numberOfArguments, char *arguments[]);
+
+// Função principal que chama a função tsmm
+int main(int argc, char *argv[]);
