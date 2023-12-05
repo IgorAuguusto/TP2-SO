@@ -70,10 +70,52 @@ void readDisk(TaskDescriptor* taskDescriptor) {
     taskDescriptor->inputOutputTime += SUSPENDED_TIME;
 }
 
+void printTaskDescriptor(TaskDescriptor taskDesc) {
+    printf("- Tarefa: %s\n", taskDesc.task.nameOfTask);
+    printf("- CPU e Disco\n");
+    printf("Tempo de CPU = %hu ut\n", taskDesc.cpuTime);
+    printf("Tempo de E/S = %hu ut\n", taskDesc.inputOutputTime);
+    printf("Taxa de ocupação da CPU = %.2f%%\n", (float)taskDesc.cpuTime / (taskDesc.cpuTime + taskDesc.inputOutputTime) * 100);
+    printf("Taxa de ocupação do disco = %.2f%%\n", taskDesc.pagination.physicalBytesAllocated == 0 ? 0 : ((float)taskDesc.pagination.bytesAllocated / taskDesc.pagination.physicalBytesAllocated) * 100);
+    printf("- Memória\n");
+    printf("Número de páginas lógicas = %u\n", taskDesc.pagination.finalPage );
+
+    for (int i = 0; i < taskDesc.quantityVariables; ++i) {
+        Variable var = taskDesc.variable[i];
+        printf("- %s\n", var.name);
+        printf("Endereço Lógicos = %u a %u ( %u : %u a %u : %u )\n", var.logicalInitialByte, var.logicalFinalByte,
+               var.logicalInitialByte / 512, var.logicalInitialByte % 512, var.logicalFinalByte / 512, var.logicalFinalByte % 512);
+        printf("Endereço Físicos = %u a %u ( %u : %u a %u : %u )\n", var.physicalInitialByte, var.physicalFinalByte,
+               var.physicalInitialByte / 512, var.physicalInitialByte % 512, var.physicalFinalByte / 512, var.physicalFinalByte % 512);
+    }
+
+    printf("- Tabela de Páginas\n");
+    for (int i = 0; i < taskDesc.pagination.finalPage; ++i) {
+        printf("PL %d (%u a %u) --> PF %d (%u a %u)\n", i, i * 512, (i + 1) * 512 - 1, taskDesc.pagination.initialBytesAllocated / 512 + i, 
+        ((taskDesc.pagination.initialBytesAllocated / 512) + i) * 512,((taskDesc.pagination.initialBytesAllocated / 512) + i) * 512 + 511);
+    }
+}
+
 boolean new(String instruction, TaskDescriptor* taskDescriptor) {
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
         if (strlen(taskDescriptor->variable[i].name) == 0) {
             sscanf(instruction, "%s new %d", taskDescriptor->variable[i].name, &taskDescriptor->variable[i].value);
+            taskDescriptor->variable->logicalInitialByte += taskDescriptor->pagination.bytesAllocated + 1;
+            taskDescriptor->variable->logicalFinalByte += taskDescriptor->pagination.bytesAllocated + taskDescriptor->variable[i].value;
+            
+            taskDescriptor->pagination.bytesAllocated += taskDescriptor->variable[i].value;
+            
+            taskDescriptor->variable->physicalInitialByte += taskDescriptor->pagination.physicalBytesAllocated + 1;
+            taskDescriptor->variable->physicalFinalByte += taskDescriptor->pagination.physicalBytesAllocated + taskDescriptor->variable[i].value;
+
+            taskDescriptor->pagination.physicalBytesAllocated += taskDescriptor->variable[i].value;
+
+            taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512.0);
+
+            if (taskDescriptor->pagination.bytesAllocated > 4096) {
+                finishTask(taskDescriptor, TRUE);
+                return FALSE;
+            }
             return TRUE;
         }
     }
@@ -119,10 +161,32 @@ void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tas
     }
 }
 
+int roundingNumber(float number) {
+    int integerPart = (int)number; 
+
+    if (number - integerPart > 0) {
+        return integerPart + 1; 
+    } 
+    else {
+        return integerPart; 
+    }
+}
+
+boolean header(String instruction, TaskDescriptor* taskDescriptor) {
+    sscanf(instruction, "#%*[^=]=%u", &taskDescriptor->pagination.bytesAllocated);
+    taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512.0);
+    taskDescriptor->pagination.bytesAllocated = taskDescriptor->pagination.finalPage * 512 - 1;
+    taskDescriptor->pagination.physicalBytesAllocated += taskDescriptor->pagination.bytesAllocated;
+    if (taskDescriptor->pagination.finalPage > 4096) {
+        finishTask(taskDescriptor, TRUE);
+        return FALSE;
+    }
+    return FALSE;
+}
+
 boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks) {
     while (roundRobin->preemptionTimeCounter < QUANTUM) {
         checkAndUpdateSuspendedTasks(queue, tasks, numberOfTasks);
-
         if (taskDescriptor != NULL && taskDescriptor->status == RUNNING) {
             String instruction;
             if (fgets(instruction, sizeof(instruction), taskDescriptor->task.taskFile) != NULL) {
@@ -130,7 +194,9 @@ boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDesc
                 taskDescriptor->cpuTime++;
 
                 if (matchRegex(instruction, INSTRUCTION_HEADER_REGEX)) {
-                    
+                    roundRobin->totalCPUClocks--;
+                    taskDescriptor->cpuTime--;
+                    header(instruction, taskDescriptor);
                 }
                 else if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
                     new(instruction, taskDescriptor);
@@ -145,20 +211,28 @@ boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDesc
                 break;
             }
         }
+        else {
+            roundRobin->waitingTime++;
+        }
         roundRobin->preemptionTimeCounter += UT;
     }
     return TRUE;
 }
 
-
 void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
     RoundRobin roudRobin;
     roudRobin.totalCPUClocks = 0;
+    roudRobin.waitingTime = 0;
     roudRobin.preemptionTimeCounter = 0;
     TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
 
+    float numberOfTasksRunning = 0;
     for (int i = 0; i < numberOfTasks; i ++) {
         if (tasks[i].status == READY && tasks[i].aborted == FALSE) {
+            numberOfTasksRunning++;
+            tasks[i].pagination.initialBytesAllocated = 20480 + i * 4096;
+            tasks[i].pagination.physicalBytesAllocated = tasks[i].pagination.initialBytesAllocated;
+            printf("\nFISICA QUANTICA: %u\n",  tasks[i].pagination.physicalBytesAllocated);
             enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
         }
     }
@@ -187,14 +261,10 @@ void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
     }
 
     for (int i = 0; i < numberOfTasks; i ++) {
-        printf("\n\tNome %s", tasks[i].task.nameOfTask);
-        printf("\n\tStatus %d", tasks[i].status);
-        printf("\n\tAbortada %d", tasks[i].aborted);
-        printf("\n\tTempo de Cpu %d", tasks[i].cpuTime);
-        printf("\n\tTempo de entrada e saida %d\n\n", tasks[i].inputOutputTime);
+        printTaskDescriptor(tasks[i]);
+        printf("\n\n");
     }
 }
-
 
 boolean matchRegex(String string, const char *pattern) {
     regex_t regex;
@@ -292,7 +362,6 @@ int tsmm(int numberOfArguments, char *arguments[]) {
     scheduleTasks(tasksDescriptions, numberOfArguments - 1);
     return EXIT_SUCCESS;
 }//tsmm()
-
 
 int main(int argc, char *argv[]) {
     return tsmm(argc, argv);

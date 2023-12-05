@@ -59,6 +59,14 @@ typedef enum {
     FINISHED
 } TaskStatus;
 
+// Instrução 
+typedef enum {
+    HEADER, 
+    NEW, 
+    MEMORY_ACESS, 
+    READER_DISk
+} Instruction;
+
 // Representa a strutura da tarefa
 typedef struct  {
    	// Número de instruções da tarefa.
@@ -75,7 +83,20 @@ typedef struct  {
 typedef struct {
     String name;
     unsigned int value;
+    unsigned int logicalInitialByte;
+    unsigned int logicalFinalByte;
+    unsigned int physicalInitialByte;
+    unsigned int physicalFinalByte;
 } Variable;
+
+// Estrutura que representa a páginação das páginas.
+typedef struct  {
+   unsigned int bytesAllocated;
+   unsigned int physicalBytesAllocated; 
+   unsigned int initialBytesAllocated; 
+   unsigned int finalPage;
+}Pagination;
+
 
 
 // Representa o descritor da tarefa
@@ -86,17 +107,22 @@ typedef struct {
     // Indica o estado atual da tarefa. O estado da tarefa deve ser atualizado segundo o seu ciclo de vida durante sua execução. 
     TaskStatus status;
 
-    // Tempo de Cpu
+    // Tempo de Cpu.
     unsigned short cpuTime;
 
-    // Variavel para controlar o tempo em que a terefa fica suspensa
+    // Variavel para controlar o tempo em que a terefa fica suspensa.
     unsigned short suspendedTime;
 
-    // Variavel de controle para saber se a terafa foi abortada
+    // Quantidade de variáveis.
+    unsigned short quantityVariables;
+
+    // Variavel de controle para saber se a terafa foi abortada.
     boolean aborted;
 
-    // Tempo de Entrada e Saida
+    // Tempo de Entrada e Saida.
     unsigned short inputOutputTime;
+
+    Pagination pagination;
 
     // Variaveis da tarefa
     Variable variable[MAXIMUN_NUMBER_OF_VARIABLES];
@@ -112,10 +138,12 @@ typedef struct {
 
     // Representa o contador de preempção por tempo (Quantum)
     TimeUnit preemptionTimeCounter;
+
+    // Representa o tempo de médio de espera
+    TimeUnit waitingTime;
 } RoundRobin;
 
 // Definição da estrutura do nó da fila
-// Alterando a estrutura TaskDescriptorNode para armazenar um ponteiro para TaskDescriptor
 typedef struct TaskDescriptorNode {
     TaskDescriptor* taskDescriptorPtr;
     struct TaskDescriptorNode* next;
@@ -184,3 +212,5 @@ int tsmm(int numberOfArguments, char *arguments[]);
 
 // Função principal que chama a função tsmm
 int main(int argc, char *argv[]);
+
+int roundingNumber(float number);
