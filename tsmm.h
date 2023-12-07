@@ -5,7 +5,7 @@
 #define FALSE 0
 
 //Formatações
-#define NEW_LINE '\n'
+#define NEW_LINE "\n"
 #define EMPTY_LINE "\n\n"
 #define TAB '\t'
 
@@ -33,9 +33,6 @@
 // Tamanho do nome do arquivo.
 #define FILE_NAME_SIZE 64
 
-// Extensão do arquivo
-#define FILE_EXTENSION ".tsk"
-
 // Constantes para memória física e lógica
 // Total de memória física em bytes (64 KB)
 #define PHYSICAL_MEMORY_TOTAL 65536  
@@ -53,6 +50,24 @@
 #define INSTRUCTION_NEW_REGEX "^[a-zA-Z_][a-zA-Z0-9_]*\\s+new\\s+[0-9]+\\s*$"
 #define INSTRUCTION_READ_DISK_REGEX "^read disk\\s*$"
 #define INSTRUCTION_IDEX_REGEX "^[a-zA-Z_][a-zA-Z0-9_]*\\s*\\[[0-9]+\\]\\s*$"
+
+// Mensagens de erros
+#define DIVERGET_INSTRUCTION_ERROR "A tarefa %s não será executada, pois tem instruções diferentes do tipo 1, 2 e 3."
+#define INVALID_ARGUMENTS_ERROR "O Programa foi abortado, número de argumentos inválidos"
+#define MEMORY_ACCESS_ERROR "A tarefa %s foi abortada, pois tentou realizar um acesso inválido à memória: %s[%d]"
+#define UNDECLARED_IDENTIFIER_ERROR "A tarefa %s foi abortada, pois tentou acessar o identificador (%s) que não foi declarado."
+#define FILE_OPEN_ERROR "Falha em abrir o arquivo: (%s)"
+#define IDENTIFY_ALREADY_DECLARED "A tarefa %s foi abortada, pois tentou criar um identificador (%s) já declarado."
+
+
+// Extensão do arquivo
+#define FILE_EXTENSION ".tsk"
+
+// Região 
+#define LOCALE "pt_BR.utf8"
+
+// Opção de abertura do arquivo.
+#define FILE_OPENING_OPTION "r"
 
 // Define uma string de tamanho padrão T, onde T é igual STRING_DEFAULT_SIZE.
 typedef char String[STRING_DEFAULT_SIZE];
@@ -130,14 +145,17 @@ typedef struct {
     // Indica o estado atual da tarefa. O estado da tarefa deve ser atualizado segundo o seu ciclo de vida durante sua execução. 
     TaskStatus status;
 
+    // Instante de tempo no qual a tarefa entrou na fila a primeira vez.
+    unsigned short startTime;
+
+    // Instante de tempo no qual a tarefa foi finalizada.
+    unsigned short endTime;
+
     // Tempo de Cpu.
     unsigned short cpuTime;
 
     // Variavel para controlar o tempo em que a terefa fica suspensa.
     unsigned short suspendedTime;
-
-    // Quantidade de variáveis.
-    unsigned short quantityVariables;
 
     // Variavel de controle para saber se a terafa foi abortada.
     boolean aborted;
@@ -145,6 +163,10 @@ typedef struct {
     // Tempo de Entrada e Saida.
     unsigned short inputOutputTime;
 
+    // Quantidade de váriaveis
+    unsigned short quantityVariables;
+
+    // Campo que representa a páginação
     Pagination pagination;
 
     // Variaveis da tarefa
@@ -158,12 +180,16 @@ typedef unsigned short int TimeUnit;
 typedef struct {
     // Representa os 'clocks' totais do CPU (UT)
     TimeUnit totalCPUClocks;
+    
+    // Representa o total de entrada e saida
+    TimeUnit totalOutputTime;
+
+    //Representa o tempo de espera
+    TimeUnit waitTime;
 
     // Representa o contador de preempção por tempo (Quantum)
     TimeUnit preemptionTimeCounter;
 
-    // Representa o tempo de médio de espera
-    TimeUnit waitingTime;
 } RoundRobin;
 
 // Definição da estrutura do nó da fila
@@ -179,61 +205,36 @@ typedef struct {
     TaskDescriptorNode* rear; 
 } TaskDescriptorQueue;
 
-// Função para criar uma fila vazia de descritores de tarefas
-TaskDescriptorQueue* createTaskDescriptorQueue();
-
-// Função para verificar se a fila de descritores de tarefas está vazia
 int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue);
-
-// Função para enfileirar um elemento na fila de descritores de tarefas
 void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr);
-
-// Função para desenfileirar um elemento da fila de descritores de tarefas
 TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue);
-
-// Função para liberar a memória alocada para a fila de descritores de tarefas
 void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue);
-
-// Função para verificar se todas as tarefas têm o status FINISHED
 boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks);
-
-// Função para realizar a leitura de disco para uma tarefa
 void readDisk(TaskDescriptor* taskDescriptor);
-
-// Função para criar uma nova variável para uma tarefa
-boolean new(String instruction, TaskDescriptor* taskDescriptor);
-
-// Função para acessar a memória de uma tarefa
-boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor);
-
-// Função para finalizar uma tarefa
-void finishTask(TaskDescriptor* taskDescriptor, boolean aborted);
-
-// Função para verificar e atualizar as tarefas suspensas
-void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks);
-
-// Função para executar a lógica da tarefa
-boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks);
-
-// Função para agendar e executar as tarefas
-void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks);
-
-// Função para verificar se uma string corresponde a um padrão regex
-boolean matchRegex(String string, const char *pattern);
-
-// Função para validar o número de argumentos passados para o programa
-boolean validateNumberOfArguments(int numberOfArguments);
-
-// Função para inicializar o descritor de tarefa
-void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName);
-
-// Função para validar um arquivo de tarefa
-boolean validateFile(FileName fileName);
-
-// Função principal do programa
-int tsmm(int numberOfArguments, char *arguments[]);
-
-// Função principal que chama a função tsmm
-int main(int argc, char *argv[]);
-
+void printTasks(TaskDescriptor tasks[], int numberOfTasks, RoundRobin roundRobin);
+float calculateCPURate(TaskDescriptor taskDesc, RoundRobin roundRobin);
+float calculateDiskRate(TaskDescriptor taskDesc, RoundRobin roundRobin);
+void printVariableMemoryInfo(Variable var);
+void printPageTableInfo(TaskDescriptor taskDesc);
+void printTaskDescriptor(TaskDescriptor taskDesc, RoundRobin roundRobin);
+void updateLogicalMemory(TaskDescriptor* taskDescriptor, int index, int value);
+void updatePhysicalMemory(TaskDescriptor* taskDescriptor, int index, int value);
+boolean new(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin);
+boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin);
+void finishTask(TaskDescriptor* taskDescriptor, boolean aborted, RoundRobin* roundRobin);
+void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks, unsigned timeUnits);
 int roundingNumber(float number);
+void updatePagination(TaskDescriptor* taskDescriptor, unsigned int bytes);
+boolean header(String instruction, TaskDescriptor* taskDescriptor);
+Instruction determineInstructionType(String instruction);
+boolean executeInstruction(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks);
+void initializeRoundRobin(RoundRobin* roundRobin);
+void initializeTaskQueue(TaskDescriptorQueue* taskDescriptorQueue, TaskDescriptor tasks[], int numberOfTasks);
+void runTasks(TaskDescriptorQueue* taskDescriptorQueue, RoundRobin* roundRobin, TaskDescriptor tasks[], int numberOfTasks);
+RoundRobin scheduleTasks(TaskDescriptor tasks[], int numberOfTasks);
+boolean matchRegex(String string, const char *pattern);
+boolean validateNumberOfArguments(int numberOfArguments);
+void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName);
+boolean validateFile(FileName fileName);
+int tsmm(int numberOfTasks, char *tasks[]);
+int main(int argc, char *argv[]);

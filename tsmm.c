@@ -1,22 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 #include <regex.h>
 #include "tsmm.h"
 
-// Função para criar uma fila vazia
+
 TaskDescriptorQueue* createTaskDescriptorQueue() {
     TaskDescriptorQueue* queue = (TaskDescriptorQueue*)malloc(sizeof(TaskDescriptorQueue));
     queue->front = queue->rear = NULL;
     return queue;
 }//createTaskDescriptorQueue()
 
-// Função para verificar se a fila está vazia
+
 int isTaskDescriptorQueueEmpty(TaskDescriptorQueue* queue) {
     return (queue->front == NULL);
 }//isTaskDescriptorQueueEmpty()
 
-// Função para enfileirar um elemento na fila
+
 void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescPtr) {
     TaskDescriptorNode* newNode = (TaskDescriptorNode*)malloc(sizeof(TaskDescriptorNode));
     newNode->taskDescriptorPtr = taskDescPtr;
@@ -31,7 +32,7 @@ void enqueueTaskDescriptor(TaskDescriptorQueue* queue, TaskDescriptor* taskDescP
     }
 }//enqueueTaskDescriptor()
 
-// Função para desenfileirar um elemento da fila
+
 TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue) {
     if (isTaskDescriptorQueueEmpty(queue)) {
         return NULL;
@@ -46,7 +47,7 @@ TaskDescriptor* dequeueTaskDescriptor(TaskDescriptorQueue* queue) {
 }//dequeueTaskDescriptor()
 
 
-// Função para liberar a memória alocada para a fila
+
 void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue) {
     while (!isTaskDescriptorQueueEmpty(queue)) {
         dequeueTaskDescriptor(queue);
@@ -54,7 +55,7 @@ void destroyTaskDescriptorQueue(TaskDescriptorQueue* queue) {
     free(queue);
 }//destroyTaskDescriptorQueue()
 
-// Função para verificar se todas as tarefas têm o status FINISHED
+
 boolean allTasksFinished(TaskDescriptor tasks[], int numberOfTasks) {
     for (int i = 0; i < numberOfTasks; i++) {
         if (tasks[i].status !=  FINISHED) {
@@ -70,32 +71,106 @@ void readDisk(TaskDescriptor* taskDescriptor) {
     taskDescriptor->inputOutputTime += SUSPENDED_TIME;
 }
 
-void printTaskDescriptor(TaskDescriptor taskDesc) {
-    printf("- Tarefa: %s\n", taskDesc.task.nameOfTask);
+void printTasks(TaskDescriptor tasks[], int numberOfTasks, RoundRobin roundRobin) {
+    for (int i = 0; i < numberOfTasks; i++) {
+        if (tasks[i].aborted == FALSE) {
+            printTaskDescriptor(tasks[i], roundRobin);
+        }
+    }
+}
+
+/* Calcula a taxa de ocupação da CPU de uma tarefa.
+   Parâmetros:
+   - taskDesc: Descritor de tarefa (TaskDescriptor).
+   - roundRobin: Estrutura RoundRobin contendo informações do sistema.
+   Retorno:
+   - Taxa de ocupação da CPU (float).
+*/
+float calculateCPURate(TaskDescriptor taskDesc, RoundRobin roundRobin) {
+    return ((float)taskDesc.cpuTime / roundRobin.totalCPUClocks) * 100;
+}
+
+/* Calcula a taxa de ocupação do disco de uma tarefa.
+   Parâmetros:
+   - taskDesc: Descritor de tarefa (TaskDescriptor).
+   - roundRobin: Estrutura RoundRobin contendo informações do sistema.
+*/
+float calculateDiskRate(TaskDescriptor taskDesc, RoundRobin roundRobin) {
+    return ((float)taskDesc.inputOutputTime / roundRobin.totalOutputTime) * 100;
+}
+
+void newLine() {
+    printf(NEW_LINE);
+}
+
+int numberOfTasksPerformedSuccessfully(TaskDescriptor tasks[], int numberOfTasks) {
+    int successfully = 0;
+    for (int i = 0; i < numberOfTasks; i++) {
+        if (tasks[i].aborted == FALSE) {
+            successfully++;
+        }
+    }
+    return successfully;
+}
+
+void printRoundRobin(RoundRobin roundRobin, int numberOfTasksPerformedSuccessfully) {
+    newLine();
+    printf("\n- Round-Robin\n");
+    printf("\t\tTempo médio de execução = %.2f s\n", (float) roundRobin.totalCPUClocks / numberOfTasksPerformedSuccessfully);
+    printf("\t\tTempo médio de espera = %.2f s\n", (float) roundRobin.waitTime / numberOfTasksPerformedSuccessfully);
+}
+
+/* Imprime as informações de memória de uma variável da tarefa.
+   Parâmetros:
+   - var: Variável (Variable) da tarefa.
+*/
+void printVariableMemoryInfo(Variable var) {
+    printf("\t\tEndereço Lógicos = %u a %u ( %u : %u a %u : %u )\n", var.logicalMemory.logicalInitialByte, var.logicalMemory.logicalFinalByte,
+        var.logicalMemory.logicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE,
+        var.logicalMemory.logicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
+    printf("\t\tEndereço Físicos = %u a %u ( %u : %u a %u : %u )\n", var.physicalMemory.physicalInitialByte, var.physicalMemory.physicalFinalByte,
+        var.physicalMemory.physicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE, 
+        var.physicalMemory.physicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
+}
+
+/* Calcula e imprime as informações da tabela de páginas de uma tarefa.
+   Parâmetros:
+   - taskDesc: Descritor de tarefa (TaskDescriptor).
+*/
+void printPageTableInfo(TaskDescriptor taskDesc) {
+    for (int i = 0; i < taskDesc.pagination.finalPage; ++i) {
+        printf("\t\tPL %d (%u a %u) --> PF %d (%u a %u)\n", i, i * LOGICAL_PHYSICAL_PAGE_SIZE, (i + 1) * LOGICAL_PHYSICAL_PAGE_SIZE - 1, 
+        taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE + i,
+        ((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE, 
+        ((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE + LOGICAL_PHYSICAL_PAGE_SIZE - 1);
+    }
+}
+
+/* Imprime todas as informações de uma tarefa.
+   Parâmetros:
+   - taskDesc: Descritor de tarefa (TaskDescriptor).
+   - roundRobin: Estrutura RoundRobin contendo informações do sistema.
+*/
+void printTaskDescriptor(TaskDescriptor taskDesc, RoundRobin roundRobin) {
+    newLine();
+    printf("\n- Tarefa: %s\n", taskDesc.task.nameOfTask);
     printf("\t- CPU e Disco\n");
     printf("\t\tTempo de CPU = %hu ut\n", taskDesc.cpuTime);
     printf("\t\tTempo de E/S = %hu ut\n", taskDesc.inputOutputTime);
-    printf("\t\tTaxa de ocupação da CPU = %.2f%%\n", (float)taskDesc.cpuTime / (taskDesc.cpuTime + taskDesc.inputOutputTime) * 100);
-    printf("\t\tTaxa de ocupação do disco = %.2f%%\n", taskDesc.pagination.physicalBytesAllocated == 0 ? 0 : ((float)taskDesc.pagination.bytesAllocated / taskDesc.pagination.physicalBytesAllocated) * 100);
+    printf("\t\tTaxa de ocupação da CPU = %.2f%%\n", calculateCPURate(taskDesc, roundRobin));
+    printf("\t\tTaxa de ocupação do disco = %.2f%%\n", calculateDiskRate(taskDesc, roundRobin));
     printf("\t- Memória\n");
     printf("\t\tNúmero de páginas lógicas = %u\n", taskDesc.pagination.finalPage );
 
     for (int i = 0; i < taskDesc.quantityVariables; ++i) {
         Variable var = taskDesc.variable[i];
-        printf("- %s\n", var.name);
-        printf("\t\tEndereço Lógicos = %u a %u ( %u : %u a %u : %u )\n", var.logicalMemory.logicalInitialByte, var.logicalMemory.logicalFinalByte,
-               var.logicalMemory.logicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE,
-                var.logicalMemory.logicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
-        printf("\t\tEndereço Físicos = %u a %u ( %u : %u a %u : %u )\n", var.physicalMemory.physicalInitialByte, var.physicalMemory.physicalFinalByte,
-               var.physicalMemory.physicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE, 
-               var.physicalMemory.physicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
+        newLine();
+        printf("\t\t- %s\n", var.name);
+        printVariableMemoryInfo(var);
     }
-
+    newLine();
     printf("\t\t- Tabela de Páginas\n");
-    for (int i = 0; i < taskDesc.pagination.finalPage; ++i) {
-        printf("\t\tPL %d (%u a %u) --> PF %d (%u a %u)\n", i, i * LOGICAL_PHYSICAL_PAGE_SIZE, (i + 1) * LOGICAL_PHYSICAL_PAGE_SIZE - 1, taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE + i, 
-        ((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE,((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE + LOGICAL_PHYSICAL_PAGE_SIZE - 1);
-    }
+    printPageTableInfo(taskDesc);
 }
 
 
@@ -103,7 +178,7 @@ void updateLogicalMemory(TaskDescriptor* taskDescriptor, int index, int value) {
     taskDescriptor->variable[index].logicalMemory.logicalInitialByte = taskDescriptor->pagination.bytesAllocated + 1;
     taskDescriptor->variable[index].logicalMemory.logicalFinalByte = taskDescriptor->pagination.bytesAllocated + value;
     taskDescriptor->pagination.bytesAllocated += value;
-    taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512);
+    taskDescriptor->pagination.finalPage = roundingNumber((float) taskDescriptor->pagination.bytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE);
 }
 
 void updatePhysicalMemory(TaskDescriptor* taskDescriptor, int index, int value) {
@@ -112,56 +187,74 @@ void updatePhysicalMemory(TaskDescriptor* taskDescriptor, int index, int value) 
     taskDescriptor->pagination.physicalBytesAllocated += value;
 }
 
-boolean new(String instruction, TaskDescriptor* taskDescriptor) {
+boolean new(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin) {
+    String identifier;
+    int value;
+    sscanf(instruction, "%s new %d", identifier, &value);
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
+        if (strcmp(identifier, taskDescriptor->variable[i].name) == 0){
+            printf(IDENTIFY_ALREADY_DECLARED, taskDescriptor->task.nameOfTask, identifier);
+            finishTask(taskDescriptor, TRUE, roundRobin);
+            return FALSE;
+        }
+        
         if (strlen(taskDescriptor->variable[i].name) == 0) {
-            sscanf(instruction, "%s new %d", taskDescriptor->variable[i].name, &taskDescriptor->variable[i].value);
-            
+            taskDescriptor->variable[i].value = value;
+            strcpy(taskDescriptor->variable[i].name, identifier);
             updateLogicalMemory(taskDescriptor, i, taskDescriptor->variable[i].value);
             updatePhysicalMemory(taskDescriptor, i, taskDescriptor->variable[i].value);
 
             if (taskDescriptor->pagination.bytesAllocated > LARGEST_LOGICAL_MEMORY_SIZE) {
-                finishTask(taskDescriptor, TRUE);
+                
+                finishTask(taskDescriptor, TRUE, roundRobin);
                 return FALSE;
             }
+            taskDescriptor->quantityVariables++;
             return TRUE;
         }
     }
+    finishTask(taskDescriptor, TRUE, roundRobin);
     return FALSE;
 }
 
-
-boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor) {
+boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin) {
     String identifier;
     unsigned int value;
     sscanf(instruction, "%[^[][%d]", identifier, &value);
-    for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
+    for (int i = 0; i < taskDescriptor->quantityVariables; i++) {
         if (strcmp(taskDescriptor->variable[i].name, identifier) == 0) {
             if (value >= taskDescriptor->variable[i].value) {
-                printf("Error in instruction: %s\n", instruction);
-                finishTask(taskDescriptor, TRUE);
+                printf(MEMORY_ACCESS_ERROR, taskDescriptor->task.nameOfTask, identifier, value);
+                finishTask(taskDescriptor, TRUE, roundRobin);
                 return FALSE;
             } else {
                 return TRUE;
             }
         }
     }
-    finishTask(taskDescriptor, TRUE);
+    printf(UNDECLARED_IDENTIFIER_ERROR, taskDescriptor->task.nameOfTask, identifier);
+    finishTask(taskDescriptor, TRUE, roundRobin);
     return FALSE;
 }
 
-void finishTask(TaskDescriptor* taskDescriptor, boolean aborted) {
-    fclose(taskDescriptor->task.taskFile);
+void finishTask(TaskDescriptor* taskDescriptor, boolean aborted, RoundRobin* roundRobin) {
+    taskDescriptor->aborted = aborted;
     taskDescriptor->status = FINISHED;
+    taskDescriptor->endTime = roundRobin->totalCPUClocks;
+    fclose(taskDescriptor->task.taskFile);
     if (aborted) {
-        taskDescriptor->aborted = TRUE;
+        roundRobin->totalCPUClocks -= taskDescriptor->cpuTime;
+        roundRobin->totalOutputTime -= taskDescriptor->inputOutputTime;
+    }
+    else {
+        roundRobin->waitTime += taskDescriptor->endTime - taskDescriptor->cpuTime - taskDescriptor->startTime;
     }
 }
 
-void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks) {
+void checkAndUpdateSuspendedTasks(TaskDescriptorQueue* queue, TaskDescriptor tasks[], int numberOfTasks, unsigned timeUnits) {
     for (int i = 0; i < numberOfTasks; i++) {
         if (tasks[i].status == SUSPENDED) {
-            tasks[i].suspendedTime -= UT;
+            tasks[i].suspendedTime -= timeUnits;
             if (tasks[i].suspendedTime == 0) {
                 tasks[i].status = READY;
                 enqueueTaskDescriptor(queue, &tasks[i]);
@@ -183,7 +276,7 @@ int roundingNumber(float number) {
 
 void updatePagination(TaskDescriptor* taskDescriptor, unsigned int bytes) {
     taskDescriptor->pagination.bytesAllocated = bytes;
-    taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512.0);
+    taskDescriptor->pagination.finalPage = roundingNumber((float) taskDescriptor->pagination.bytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE);
     taskDescriptor->pagination.bytesAllocated = taskDescriptor->pagination.finalPage * LOGICAL_PHYSICAL_PAGE_SIZE - 1;
     taskDescriptor->pagination.physicalBytesAllocated += taskDescriptor->pagination.bytesAllocated;
 }
@@ -195,10 +288,10 @@ boolean header(String instruction, TaskDescriptor* taskDescriptor) {
     updatePagination(taskDescriptor, bytes);
 
     if (taskDescriptor->pagination.finalPage > LARGEST_LOGICAL_MEMORY_SIZE) {
-        finishTask(taskDescriptor, TRUE);
+        finishTask(taskDescriptor, TRUE, FALSE);
         return FALSE;
     }
-    return FALSE;
+    return TRUE;
 }
 
 Instruction determineInstructionType(String instruction) {
@@ -220,58 +313,59 @@ Instruction determineInstructionType(String instruction) {
 }
 
 
-boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks) {
-    while (roundRobin->preemptionTimeCounter < QUANTUM) {
-        checkAndUpdateSuspendedTasks(queue, tasks, numberOfTasks);
+int executeInstruction(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks) {
+    while (roundRobin->preemptionTimeCounter <= QUANTUM) {
         if (taskDescriptor != NULL && taskDescriptor->status == RUNNING) {
             String instruction;
             if (fgets(instruction, sizeof(instruction), taskDescriptor->task.taskFile) != NULL) {
-                roundRobin->totalCPUClocks++;
-                taskDescriptor->cpuTime++;
+                roundRobin->totalCPUClocks+= UT;
+                taskDescriptor->cpuTime+= UT;
 
                 Instruction instructionType = determineInstructionType(instruction);
 
                 switch (instructionType) {
                     case HEADER:
-                        roundRobin->totalCPUClocks--;
-                        taskDescriptor->cpuTime--;
+                        roundRobin->preemptionTimeCounter--;
+                        roundRobin->totalCPUClocks-= UT;
+                        taskDescriptor->cpuTime-= UT;
                         header(instruction, taskDescriptor);
                         break;
                     case NEW:
-                        new(instruction, taskDescriptor);
+                        new(instruction, taskDescriptor, roundRobin);
                         break;
                     case MEMORY_ACCESS:
-                        memoryAccess(instruction, taskDescriptor);
+                        memoryAccess(instruction, taskDescriptor, roundRobin);
                         break;
                     case READ_DISK:
                         readDisk(taskDescriptor);
+                        roundRobin->totalOutputTime += SUSPENDED_TIME;
                         break;
                     default:
-                        finishTask(taskDescriptor, FALSE);
+                        finishTask(taskDescriptor, FALSE, roundRobin);
                         break;
                 }
-            } else {
-                finishTask(taskDescriptor, FALSE);
+            } 
+            else {
+                finishTask(taskDescriptor, FALSE, roundRobin);
                 break;
             }
-        } else {
-            //roundRobin->waitingTime++;
         }
         roundRobin->preemptionTimeCounter += UT;
     }
-    return TRUE;
+    return roundRobin->preemptionTimeCounter;
 }
 
 
 void initializeRoundRobin(RoundRobin* roundRobin) {
     roundRobin->totalCPUClocks = 0;
-    roundRobin->waitingTime = 0;
-    roundRobin->preemptionTimeCounter = 0;
+    roundRobin->preemptionTimeCounter = 1;
+    roundRobin->waitTime = 0;
 }
 
 void initializeTaskQueue(TaskDescriptorQueue* taskDescriptorQueue, TaskDescriptor tasks[], int numberOfTasks) {
     for (int i = 0; i < numberOfTasks; i++) {
         if (tasks[i].status == READY && tasks[i].aborted == FALSE) {
+            tasks[i].startTime = i;
             tasks[i].pagination.initialBytesAllocated = RESERVED_PROGRAM_MEMORY_SIZE + i * LARGEST_LOGICAL_MEMORY_SIZE;
             tasks[i].pagination.physicalBytesAllocated = tasks[i].pagination.initialBytesAllocated;
             enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
@@ -292,32 +386,27 @@ void runTasks(TaskDescriptorQueue* taskDescriptorQueue, RoundRobin* roundRobin, 
             taskRunningPtr->status = RUNNING;
         }
         
-        executeTask(taskDescriptorQueue, roundRobin, taskRunningPtr, tasks, numberOfTasks);
+        executeInstruction(taskDescriptorQueue, roundRobin, taskRunningPtr, tasks, numberOfTasks);
         
         if (taskRunningPtr != NULL && taskRunningPtr->status == RUNNING) {
             taskRunningPtr->status = READY;
             enqueueTaskDescriptor(taskDescriptorQueue, taskRunningPtr);
         }
-
-        roundRobin->preemptionTimeCounter = 0;
+        
+        checkAndUpdateSuspendedTasks(taskDescriptorQueue, tasks, numberOfTasks, roundRobin->preemptionTimeCounter);
+        
+        roundRobin->preemptionTimeCounter = 1;
     }
 }
 
-void printTasks(TaskDescriptor tasks[], int numberOfTasks) {
-    for (int i = 0; i < numberOfTasks; i++) {
-        printTaskDescriptor(tasks[i]);
-        printf("\n\n");
-    }
-}
-
-void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
+RoundRobin scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
     RoundRobin roundRobin;
     TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
 
     initializeRoundRobin(&roundRobin);
     initializeTaskQueue(taskDescriptorQueue, tasks, numberOfTasks);
     runTasks(taskDescriptorQueue, &roundRobin, tasks, numberOfTasks);
-    printTasks(tasks, numberOfTasks);
+    return roundRobin;
 }
 
 
@@ -327,9 +416,6 @@ boolean matchRegex(String string, const char *pattern) {
 
     result = regcomp(&regex, pattern, REG_EXTENDED);
     if (result != 0) {
-        char error_message[100];
-        regerror(result, &regex, error_message, sizeof(error_message));
-        fprintf(stderr, "Erro ao compilar a expressão regular: %s\n", error_message);
         return FALSE;
     }
     
@@ -358,7 +444,7 @@ void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName) {
     strcpy(descriptor->task.nameOfTask, taskName);
     FileName fullFileName;
     snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", taskName, FILE_EXTENSION);
-    descriptor->task.taskFile = fopen(fullFileName, "r");
+    descriptor->task.taskFile = fopen(fullFileName, FILE_OPENING_OPTION);
     descriptor->status = READY;
     descriptor->aborted = FALSE;
 
@@ -373,10 +459,10 @@ boolean validateFile(FileName fileName) {
     FileName fullFileName;
     snprintf(fullFileName, FILE_NAME_SIZE, "%s%s", fileName, FILE_EXTENSION);
 
-    FILE *file = fopen(fullFileName, "r");
+    FILE *file = fopen(fullFileName, FILE_OPENING_OPTION);
 
     if (file == NULL) {
-        perror("Erro ao abrir o arquivo");
+        printf(FILE_OPEN_ERROR, fileName);
         return FALSE;
     }
     String line;
@@ -397,24 +483,27 @@ boolean validateFile(FileName fileName) {
     return TRUE;
 }//validateFile()
 
-int tsmm(int numberOfArguments, char *arguments[]) {
-    if (!validateNumberOfArguments(numberOfArguments)) {
-        perror("Programa finalizado, argumentos inválidos");
+int tsmm(int numberOfTasks, char *tasks[]) {
+    setlocale(LC_ALL, LOCALE);
+    if (!validateNumberOfArguments(numberOfTasks)) {
+        perror(INVALID_ARGUMENTS_ERROR);
         exit(EXIT_FAILURE);
     }
 
-    TaskDescriptor tasksDescriptions[numberOfArguments -1];
-    for (int i = 1; i < numberOfArguments; i++) {
-        if (!validateFile(arguments[i])) {
-            printf("\nError Arquivo %s\n", arguments[i]);
+    TaskDescriptor tasksDescriptions[numberOfTasks -1];
+    for (int i = 1; i < numberOfTasks; i++) {
+        if (!validateFile(tasks[i])) {
+            printf(DIVERGET_INSTRUCTION_ERROR, tasks[i]);
             tasksDescriptions[i - 1].aborted = TRUE;
             tasksDescriptions[i - 1].status = FINISHED;
         }
         else {
-            initializeTaskDescriptor(&tasksDescriptions[i - 1], arguments[i]);
+            initializeTaskDescriptor(&tasksDescriptions[i - 1], tasks[i]);
         }
     }
-    scheduleTasks(tasksDescriptions, numberOfArguments - 1);
+    RoundRobin roundRobin = scheduleTasks(tasksDescriptions, numberOfTasks - 1);
+    printRoundRobin(roundRobin, numberOfTasksPerformedSuccessfully(tasksDescriptions, numberOfTasks));
+    printTasks(tasksDescriptions, numberOfTasks, roundRobin);
     return EXIT_SUCCESS;
 }//tsmm()
 
