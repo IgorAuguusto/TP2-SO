@@ -436,10 +436,11 @@ void updatePagination(TaskDescriptor* taskDescriptor, unsigned int bytes);
    Parâmetros:
    - instruction: String contendo a instrução do cabeçalho.
    - taskDescriptor: Ponteiro para o descritor de tarefa (TaskDescriptor) a ser atualizado.
+   - roundRobin: Ponteiro para a estrutura RoundRobin contendo informações do sistema.
    Retorno:
    - Retorna TRUE se a operação for bem-sucedida; FALSE, caso contrário.
 */
-boolean header(String instruction, TaskDescriptor* taskDescriptor);
+boolean header(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin);
 
 /* Determina o tipo de instrução baseado em padrões regex.
    Esta função verifica o tipo de instrução com base em padrões regex e retorna

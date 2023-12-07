@@ -374,7 +374,8 @@ void finishTask(TaskDescriptor* taskDescriptor, boolean aborted, RoundRobin* rou
         roundRobin->totalCPUClocks -= taskDescriptor->cpuTime;
         roundRobin->totalOutputTime -= taskDescriptor->inputOutputTime;
     }
-    else {
+    int number = taskDescriptor->endTime - taskDescriptor->cpuTime - taskDescriptor->startTime;
+    if(number > 0){
         roundRobin->waitTime += taskDescriptor->endTime - taskDescriptor->cpuTime - taskDescriptor->startTime;
     }
 }//finishTask()
@@ -441,17 +442,17 @@ void updatePagination(TaskDescriptor* taskDescriptor, unsigned int bytes) {
    Retorno:
    - Retorna TRUE se a operação for bem-sucedida; FALSE, caso contrário.
 */
-boolean header(String instruction, TaskDescriptor* taskDescriptor) {
+boolean header(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin) {
     unsigned int bytes;
     sscanf(instruction, "#%*[^=]=%u", &bytes);
-    
-    updatePagination(taskDescriptor, bytes);
 
     if (taskDescriptor->pagination.finalPage > LARGEST_LOGICAL_MEMORY_SIZE) {
         printf(ALLOCATION_SPACE_ERROR, taskDescriptor->task.nameOfTask, LARGEST_LOGICAL_MEMORY_SIZE);
-        finishTask(taskDescriptor, TRUE, FALSE);
+        finishTask(taskDescriptor, TRUE, roundRobin);
         return FALSE;
     }
+    updatePagination(taskDescriptor, bytes);
+    
     return TRUE;
 }//header()
 
@@ -509,7 +510,7 @@ int executeInstruction(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskD
                         roundRobin->preemptionTimeCounter--;
                         roundRobin->totalCPUClocks-= UT;
                         taskDescriptor->cpuTime-= UT;
-                        header(instruction, taskDescriptor);
+                        header(instruction, taskDescriptor, roundRobin);
                         break;
                     case NEW:
                         new(instruction, taskDescriptor, roundRobin);
@@ -741,7 +742,8 @@ int tsmm(int numberOfTasks, char *tasks[]) {
         perror(INVALID_ARGUMENTS_ERROR);
         exit(EXIT_FAILURE);
     }
-
+    RoundRobin roundRobin;
+    initializeRoundRobin(&roundRobin);
     TaskDescriptor tasksDescriptions[numberOfTasks -1];
     for (int i = 1; i < numberOfTasks; i++) {
         if (!validateFile(tasks[i])) {
@@ -753,7 +755,7 @@ int tsmm(int numberOfTasks, char *tasks[]) {
             initializeTaskDescriptor(&tasksDescriptions[i - 1], tasks[i]);
         }
     }
-    RoundRobin roundRobin = scheduleTasks(tasksDescriptions, numberOfTasks - 1);
+    roundRobin = scheduleTasks(tasksDescriptions, numberOfTasks - 1);
     printRoundRobin(roundRobin, numberOfTasksPerformedSuccessfully(tasksDescriptions, numberOfTasks));
     printTasks(tasksDescriptions, numberOfTasks, roundRobin);
     return EXIT_SUCCESS;
