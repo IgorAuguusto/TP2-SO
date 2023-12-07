@@ -72,47 +72,55 @@ void readDisk(TaskDescriptor* taskDescriptor) {
 
 void printTaskDescriptor(TaskDescriptor taskDesc) {
     printf("- Tarefa: %s\n", taskDesc.task.nameOfTask);
-    printf("- CPU e Disco\n");
-    printf("Tempo de CPU = %hu ut\n", taskDesc.cpuTime);
-    printf("Tempo de E/S = %hu ut\n", taskDesc.inputOutputTime);
-    printf("Taxa de ocupação da CPU = %.2f%%\n", (float)taskDesc.cpuTime / (taskDesc.cpuTime + taskDesc.inputOutputTime) * 100);
-    printf("Taxa de ocupação do disco = %.2f%%\n", taskDesc.pagination.physicalBytesAllocated == 0 ? 0 : ((float)taskDesc.pagination.bytesAllocated / taskDesc.pagination.physicalBytesAllocated) * 100);
-    printf("- Memória\n");
-    printf("Número de páginas lógicas = %u\n", taskDesc.pagination.finalPage );
+    printf("\t- CPU e Disco\n");
+    printf("\t\tTempo de CPU = %hu ut\n", taskDesc.cpuTime);
+    printf("\t\tTempo de E/S = %hu ut\n", taskDesc.inputOutputTime);
+    printf("\t\tTaxa de ocupação da CPU = %.2f%%\n", (float)taskDesc.cpuTime / (taskDesc.cpuTime + taskDesc.inputOutputTime) * 100);
+    printf("\t\tTaxa de ocupação do disco = %.2f%%\n", taskDesc.pagination.physicalBytesAllocated == 0 ? 0 : ((float)taskDesc.pagination.bytesAllocated / taskDesc.pagination.physicalBytesAllocated) * 100);
+    printf("\t- Memória\n");
+    printf("\t\tNúmero de páginas lógicas = %u\n", taskDesc.pagination.finalPage );
 
     for (int i = 0; i < taskDesc.quantityVariables; ++i) {
         Variable var = taskDesc.variable[i];
         printf("- %s\n", var.name);
-        printf("Endereço Lógicos = %u a %u ( %u : %u a %u : %u )\n", var.logicalInitialByte, var.logicalFinalByte,
-               var.logicalInitialByte / 512, var.logicalInitialByte % 512, var.logicalFinalByte / 512, var.logicalFinalByte % 512);
-        printf("Endereço Físicos = %u a %u ( %u : %u a %u : %u )\n", var.physicalInitialByte, var.physicalFinalByte,
-               var.physicalInitialByte / 512, var.physicalInitialByte % 512, var.physicalFinalByte / 512, var.physicalFinalByte % 512);
+        printf("\t\tEndereço Lógicos = %u a %u ( %u : %u a %u : %u )\n", var.logicalMemory.logicalInitialByte, var.logicalMemory.logicalFinalByte,
+               var.logicalMemory.logicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE, var.logicalMemory.logicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE,
+                var.logicalMemory.logicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
+        printf("\t\tEndereço Físicos = %u a %u ( %u : %u a %u : %u )\n", var.physicalMemory.physicalInitialByte, var.physicalMemory.physicalFinalByte,
+               var.physicalMemory.physicalInitialByte / LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalInitialByte % LOGICAL_PHYSICAL_PAGE_SIZE, var.physicalMemory.physicalFinalByte / LOGICAL_PHYSICAL_PAGE_SIZE, 
+               var.physicalMemory.physicalFinalByte % LOGICAL_PHYSICAL_PAGE_SIZE);
     }
 
-    printf("- Tabela de Páginas\n");
+    printf("\t\t- Tabela de Páginas\n");
     for (int i = 0; i < taskDesc.pagination.finalPage; ++i) {
-        printf("PL %d (%u a %u) --> PF %d (%u a %u)\n", i, i * 512, (i + 1) * 512 - 1, taskDesc.pagination.initialBytesAllocated / 512 + i, 
-        ((taskDesc.pagination.initialBytesAllocated / 512) + i) * 512,((taskDesc.pagination.initialBytesAllocated / 512) + i) * 512 + 511);
+        printf("\t\tPL %d (%u a %u) --> PF %d (%u a %u)\n", i, i * LOGICAL_PHYSICAL_PAGE_SIZE, (i + 1) * LOGICAL_PHYSICAL_PAGE_SIZE - 1, taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE + i, 
+        ((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE,((taskDesc.pagination.initialBytesAllocated / LOGICAL_PHYSICAL_PAGE_SIZE) + i) * LOGICAL_PHYSICAL_PAGE_SIZE + LOGICAL_PHYSICAL_PAGE_SIZE - 1);
     }
+}
+
+
+void updateLogicalMemory(TaskDescriptor* taskDescriptor, int index, int value) {
+    taskDescriptor->variable[index].logicalMemory.logicalInitialByte = taskDescriptor->pagination.bytesAllocated + 1;
+    taskDescriptor->variable[index].logicalMemory.logicalFinalByte = taskDescriptor->pagination.bytesAllocated + value;
+    taskDescriptor->pagination.bytesAllocated += value;
+    taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512);
+}
+
+void updatePhysicalMemory(TaskDescriptor* taskDescriptor, int index, int value) {
+    taskDescriptor->variable[index].physicalMemory.physicalInitialByte = taskDescriptor->pagination.physicalBytesAllocated + 1;
+    taskDescriptor->variable[index].physicalMemory.physicalFinalByte = taskDescriptor->pagination.physicalBytesAllocated + value;
+    taskDescriptor->pagination.physicalBytesAllocated += value;
 }
 
 boolean new(String instruction, TaskDescriptor* taskDescriptor) {
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
         if (strlen(taskDescriptor->variable[i].name) == 0) {
             sscanf(instruction, "%s new %d", taskDescriptor->variable[i].name, &taskDescriptor->variable[i].value);
-            taskDescriptor->variable->logicalInitialByte += taskDescriptor->pagination.bytesAllocated + 1;
-            taskDescriptor->variable->logicalFinalByte += taskDescriptor->pagination.bytesAllocated + taskDescriptor->variable[i].value;
             
-            taskDescriptor->pagination.bytesAllocated += taskDescriptor->variable[i].value;
-            
-            taskDescriptor->variable->physicalInitialByte += taskDescriptor->pagination.physicalBytesAllocated + 1;
-            taskDescriptor->variable->physicalFinalByte += taskDescriptor->pagination.physicalBytesAllocated + taskDescriptor->variable[i].value;
+            updateLogicalMemory(taskDescriptor, i, taskDescriptor->variable[i].value);
+            updatePhysicalMemory(taskDescriptor, i, taskDescriptor->variable[i].value);
 
-            taskDescriptor->pagination.physicalBytesAllocated += taskDescriptor->variable[i].value;
-
-            taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512.0);
-
-            if (taskDescriptor->pagination.bytesAllocated > 4096) {
+            if (taskDescriptor->pagination.bytesAllocated > LARGEST_LOGICAL_MEMORY_SIZE) {
                 finishTask(taskDescriptor, TRUE);
                 return FALSE;
             }
@@ -121,6 +129,7 @@ boolean new(String instruction, TaskDescriptor* taskDescriptor) {
     }
     return FALSE;
 }
+
 
 boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor) {
     String identifier;
@@ -172,17 +181,44 @@ int roundingNumber(float number) {
     }
 }
 
-boolean header(String instruction, TaskDescriptor* taskDescriptor) {
-    sscanf(instruction, "#%*[^=]=%u", &taskDescriptor->pagination.bytesAllocated);
+void updatePagination(TaskDescriptor* taskDescriptor, unsigned int bytes) {
+    taskDescriptor->pagination.bytesAllocated = bytes;
     taskDescriptor->pagination.finalPage = roundingNumber(taskDescriptor->pagination.bytesAllocated / 512.0);
-    taskDescriptor->pagination.bytesAllocated = taskDescriptor->pagination.finalPage * 512 - 1;
+    taskDescriptor->pagination.bytesAllocated = taskDescriptor->pagination.finalPage * LOGICAL_PHYSICAL_PAGE_SIZE - 1;
     taskDescriptor->pagination.physicalBytesAllocated += taskDescriptor->pagination.bytesAllocated;
-    if (taskDescriptor->pagination.finalPage > 4096) {
+}
+
+boolean header(String instruction, TaskDescriptor* taskDescriptor) {
+    unsigned int bytes;
+    sscanf(instruction, "#%*[^=]=%u", &bytes);
+    
+    updatePagination(taskDescriptor, bytes);
+
+    if (taskDescriptor->pagination.finalPage > LARGEST_LOGICAL_MEMORY_SIZE) {
         finishTask(taskDescriptor, TRUE);
         return FALSE;
     }
     return FALSE;
 }
+
+Instruction determineInstructionType(String instruction) {
+    if (matchRegex(instruction, INSTRUCTION_HEADER_REGEX)) {
+        return HEADER;
+    } 
+    else if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
+        return NEW;
+    } 
+    else if (matchRegex(instruction, INSTRUCTION_IDEX_REGEX)) {
+        return MEMORY_ACCESS;
+    } 
+    else if (matchRegex(instruction, INSTRUCTION_READ_DISK_REGEX)) {
+        return READ_DISK;
+    } 
+    else {
+        return -1; 
+    }
+}
+
 
 boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDescriptor* taskDescriptor, TaskDescriptor tasks[], int numberOfTasks) {
     while (roundRobin->preemptionTimeCounter < QUANTUM) {
@@ -193,52 +229,58 @@ boolean executeTask(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskDesc
                 roundRobin->totalCPUClocks++;
                 taskDescriptor->cpuTime++;
 
-                if (matchRegex(instruction, INSTRUCTION_HEADER_REGEX)) {
-                    roundRobin->totalCPUClocks--;
-                    taskDescriptor->cpuTime--;
-                    header(instruction, taskDescriptor);
-                }
-                else if (matchRegex(instruction, INSTRUCTION_NEW_REGEX)) {
-                    new(instruction, taskDescriptor);
-                } else if (matchRegex(instruction, INSTRUCTION_IDEX_REGEX)) {
-                    memoryAccess(instruction, taskDescriptor);
-                } else if (matchRegex(instruction, INSTRUCTION_READ_DISK_REGEX)) {
-                    readDisk(taskDescriptor);
-                    break;
+                Instruction instructionType = determineInstructionType(instruction);
+
+                switch (instructionType) {
+                    case HEADER:
+                        roundRobin->totalCPUClocks--;
+                        taskDescriptor->cpuTime--;
+                        header(instruction, taskDescriptor);
+                        break;
+                    case NEW:
+                        new(instruction, taskDescriptor);
+                        break;
+                    case MEMORY_ACCESS:
+                        memoryAccess(instruction, taskDescriptor);
+                        break;
+                    case READ_DISK:
+                        readDisk(taskDescriptor);
+                        break;
+                    default:
+                        finishTask(taskDescriptor, FALSE);
+                        break;
                 }
             } else {
                 finishTask(taskDescriptor, FALSE);
                 break;
             }
-        }
-        else {
-            roundRobin->waitingTime++;
+        } else {
+            //roundRobin->waitingTime++;
         }
         roundRobin->preemptionTimeCounter += UT;
     }
     return TRUE;
 }
 
-void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
-    RoundRobin roudRobin;
-    roudRobin.totalCPUClocks = 0;
-    roudRobin.waitingTime = 0;
-    roudRobin.preemptionTimeCounter = 0;
-    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
 
-    float numberOfTasksRunning = 0;
-    for (int i = 0; i < numberOfTasks; i ++) {
+void initializeRoundRobin(RoundRobin* roundRobin) {
+    roundRobin->totalCPUClocks = 0;
+    roundRobin->waitingTime = 0;
+    roundRobin->preemptionTimeCounter = 0;
+}
+
+void initializeTaskQueue(TaskDescriptorQueue* taskDescriptorQueue, TaskDescriptor tasks[], int numberOfTasks) {
+    for (int i = 0; i < numberOfTasks; i++) {
         if (tasks[i].status == READY && tasks[i].aborted == FALSE) {
-            numberOfTasksRunning++;
-            tasks[i].pagination.initialBytesAllocated = 20480 + i * 4096;
+            tasks[i].pagination.initialBytesAllocated = RESERVED_PROGRAM_MEMORY_SIZE + i * LARGEST_LOGICAL_MEMORY_SIZE;
             tasks[i].pagination.physicalBytesAllocated = tasks[i].pagination.initialBytesAllocated;
-            printf("\nFISICA QUANTICA: %u\n",  tasks[i].pagination.physicalBytesAllocated);
             enqueueTaskDescriptor(taskDescriptorQueue, &tasks[i]);
         }
     }
+}
 
+void runTasks(TaskDescriptorQueue* taskDescriptorQueue, RoundRobin* roundRobin, TaskDescriptor tasks[], int numberOfTasks) {
     while (TRUE) {
-
         if (allTasksFinished(tasks, numberOfTasks)) {
             destroyTaskDescriptorQueue(taskDescriptorQueue);
             break;
@@ -250,21 +292,34 @@ void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
             taskRunningPtr->status = RUNNING;
         }
         
-        executeTask(taskDescriptorQueue, &roudRobin, taskRunningPtr, tasks, numberOfTasks);
+        executeTask(taskDescriptorQueue, roundRobin, taskRunningPtr, tasks, numberOfTasks);
         
         if (taskRunningPtr != NULL && taskRunningPtr->status == RUNNING) {
             taskRunningPtr->status = READY;
             enqueueTaskDescriptor(taskDescriptorQueue, taskRunningPtr);
         }
 
-        roudRobin.preemptionTimeCounter = 0;
+        roundRobin->preemptionTimeCounter = 0;
     }
+}
 
-    for (int i = 0; i < numberOfTasks; i ++) {
+void printTasks(TaskDescriptor tasks[], int numberOfTasks) {
+    for (int i = 0; i < numberOfTasks; i++) {
         printTaskDescriptor(tasks[i]);
         printf("\n\n");
     }
 }
+
+void scheduleTasks(TaskDescriptor tasks[], int numberOfTasks) {
+    RoundRobin roundRobin;
+    TaskDescriptorQueue* taskDescriptorQueue = createTaskDescriptorQueue(); 
+
+    initializeRoundRobin(&roundRobin);
+    initializeTaskQueue(taskDescriptorQueue, tasks, numberOfTasks);
+    runTasks(taskDescriptorQueue, &roundRobin, tasks, numberOfTasks);
+    printTasks(tasks, numberOfTasks);
+}
+
 
 boolean matchRegex(String string, const char *pattern) {
     regex_t regex;

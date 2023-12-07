@@ -36,6 +36,18 @@
 // Extensão do arquivo
 #define FILE_EXTENSION ".tsk"
 
+// Constantes para memória física e lógica
+// Total de memória física em bytes (64 KB)
+#define PHYSICAL_MEMORY_TOTAL 65536  
+// Maior tamanho de memória lógica em bytes (4 KB)
+#define LARGEST_LOGICAL_MEMORY_SIZE 4096  
+
+
+// Tamanho de cada página lógica/física em bytes
+#define LOGICAL_PHYSICAL_PAGE_SIZE 512  
+
+#define RESERVED_PROGRAM_MEMORY_SIZE 20480 
+
 // Padrões das instruções do arquivo
 #define INSTRUCTION_HEADER_REGEX "^#T=[0-9]+\\s*$"
 #define INSTRUCTION_NEW_REGEX "^[a-zA-Z_][a-zA-Z0-9_]*\\s+new\\s+[0-9]+\\s*$"
@@ -63,8 +75,8 @@ typedef enum {
 typedef enum {
     HEADER, 
     NEW, 
-    MEMORY_ACESS, 
-    READER_DISk
+    MEMORY_ACCESS, 
+    READ_DISK
 } Instruction;
 
 // Representa a strutura da tarefa
@@ -79,14 +91,25 @@ typedef struct  {
 	FILE *taskFile;
 } Task;
 
+// Representa as memórias logugicas.
+typedef struct {
+    unsigned int logicalInitialByte;
+    unsigned int logicalFinalByte;
+} LogicalMemory;
+
+// Representa as memórias fisícas.
+typedef struct {
+    unsigned int physicalInitialByte;
+    unsigned int physicalFinalByte;
+} PhysicalMemory;
+
 // Estrutura para representar uma variavel da instrução new
 typedef struct {
     String name;
     unsigned int value;
-    unsigned int logicalInitialByte;
-    unsigned int logicalFinalByte;
-    unsigned int physicalInitialByte;
-    unsigned int physicalFinalByte;
+
+    LogicalMemory logicalMemory;
+    PhysicalMemory physicalMemory;
 } Variable;
 
 // Estrutura que representa a páginação das páginas.
@@ -95,7 +118,7 @@ typedef struct  {
    unsigned int physicalBytesAllocated; 
    unsigned int initialBytesAllocated; 
    unsigned int finalPage;
-}Pagination;
+} Pagination;
 
 
 
