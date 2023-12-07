@@ -99,10 +99,6 @@ float calculateDiskRate(TaskDescriptor taskDesc, RoundRobin roundRobin) {
     return ((float)taskDesc.inputOutputTime / roundRobin.totalOutputTime) * 100;
 }
 
-void newLine() {
-    printf(NEW_LINE);
-}
-
 int numberOfTasksPerformedSuccessfully(TaskDescriptor tasks[], int numberOfTasks) {
     int successfully = 0;
     for (int i = 0; i < numberOfTasks; i++) {
@@ -114,8 +110,7 @@ int numberOfTasksPerformedSuccessfully(TaskDescriptor tasks[], int numberOfTasks
 }
 
 void printRoundRobin(RoundRobin roundRobin, int numberOfTasksPerformedSuccessfully) {
-    newLine();
-    printf("\n- Round-Robin\n");
+    printf("\n\n- Round-Robin\n");
     printf("\t\tTempo médio de execução = %.2f s\n", (float) roundRobin.totalCPUClocks / numberOfTasksPerformedSuccessfully);
     printf("\t\tTempo médio de espera = %.2f s\n", (float) roundRobin.waitTime / numberOfTasksPerformedSuccessfully);
 }
@@ -152,8 +147,7 @@ void printPageTableInfo(TaskDescriptor taskDesc) {
    - roundRobin: Estrutura RoundRobin contendo informações do sistema.
 */
 void printTaskDescriptor(TaskDescriptor taskDesc, RoundRobin roundRobin) {
-    newLine();
-    printf("\n- Tarefa: %s\n", taskDesc.task.nameOfTask);
+    printf("\n\n- Tarefa: %s\n", taskDesc.task.nameOfTask);
     printf("\t- CPU e Disco\n");
     printf("\t\tTempo de CPU = %hu ut\n", taskDesc.cpuTime);
     printf("\t\tTempo de E/S = %hu ut\n", taskDesc.inputOutputTime);
@@ -164,12 +158,13 @@ void printTaskDescriptor(TaskDescriptor taskDesc, RoundRobin roundRobin) {
 
     for (int i = 0; i < taskDesc.quantityVariables; ++i) {
         Variable var = taskDesc.variable[i];
-        newLine();
-        printf("\t\t- %s\n", var.name);
+        printf("\n\t\t- %s\n", var.name);
         printVariableMemoryInfo(var);
     }
-    newLine();
-    printf("\t\t- Tabela de Páginas\n");
+
+    printTaskMemoryAccesses(taskDesc);
+
+    printf("\n\t\t- Tabela de Páginas\n");
     printPageTableInfo(taskDesc);
 }
 
@@ -193,7 +188,7 @@ boolean new(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roun
     sscanf(instruction, "%s new %d", identifier, &value);
     for (int i = 0; i < MAXIMUN_NUMBER_OF_VARIABLES; i++) {
         if (strcmp(identifier, taskDescriptor->variable[i].name) == 0){
-            printf(IDENTIFY_ALREADY_DECLARED, taskDescriptor->task.nameOfTask, identifier);
+            printf(IDENTIFY_ALREADY_DECLARED_ERROR, taskDescriptor->task.nameOfTask, identifier);
             finishTask(taskDescriptor, TRUE, roundRobin);
             return FALSE;
         }
@@ -205,7 +200,7 @@ boolean new(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roun
             updatePhysicalMemory(taskDescriptor, i, taskDescriptor->variable[i].value);
 
             if (taskDescriptor->pagination.bytesAllocated > LARGEST_LOGICAL_MEMORY_SIZE) {
-                
+                printf(ALLOCATION_SPACE_ERROR, taskDescriptor->task.nameOfTask, LARGEST_LOGICAL_MEMORY_SIZE);
                 finishTask(taskDescriptor, TRUE, roundRobin);
                 return FALSE;
             }
@@ -216,6 +211,21 @@ boolean new(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roun
     finishTask(taskDescriptor, TRUE, roundRobin);
     return FALSE;
 }
+
+void printTaskMemoryAccesses(TaskDescriptor taskDesc) {
+      for (int i = 0; i < taskDesc.quantityAccesses; ++i) {
+        int logicalPage = (taskDesc.accesses[i].logicalMemory.logicalInitialByte + taskDesc.accesses[i].value) / LOGICAL_PHYSICAL_PAGE_SIZE; 
+        int physicalPage = (taskDesc.accesses[i].physicalMemory.physicalInitialByte + taskDesc.accesses[i].value) / LOGICAL_PHYSICAL_PAGE_SIZE;
+
+        int logicalByte = (taskDesc.accesses[i].logicalMemory.logicalInitialByte + taskDesc.accesses[i].value) % LOGICAL_PHYSICAL_PAGE_SIZE; 
+        int physicalByte = (taskDesc.accesses[i].physicalMemory.physicalInitialByte + taskDesc.accesses[i].value) % LOGICAL_PHYSICAL_PAGE_SIZE;
+
+        printf("\n\t\t%s[%d] -> Endereço Lógico = %d : %d\n", taskDesc.accesses[i].name, taskDesc.accesses[i].value, logicalPage, logicalByte);
+        printf("\t\t-> Endereço Físico = %d : %d\n", physicalPage, physicalByte);
+    }
+}
+
+
 
 boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor, RoundRobin* roundRobin) {
     String identifier;
@@ -228,6 +238,8 @@ boolean memoryAccess(String instruction, TaskDescriptor* taskDescriptor, RoundRo
                 finishTask(taskDescriptor, TRUE, roundRobin);
                 return FALSE;
             } else {
+                taskDescriptor->accesses[taskDescriptor->quantityAccesses] = taskDescriptor->variable[i];
+                taskDescriptor->accesses[taskDescriptor->quantityAccesses++].value = value;
                 return TRUE;
             }
         }
@@ -288,6 +300,7 @@ boolean header(String instruction, TaskDescriptor* taskDescriptor) {
     updatePagination(taskDescriptor, bytes);
 
     if (taskDescriptor->pagination.finalPage > LARGEST_LOGICAL_MEMORY_SIZE) {
+        printf(ALLOCATION_SPACE_ERROR, taskDescriptor->task.nameOfTask, LARGEST_LOGICAL_MEMORY_SIZE);
         finishTask(taskDescriptor, TRUE, FALSE);
         return FALSE;
     }
@@ -318,8 +331,8 @@ int executeInstruction(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskD
         if (taskDescriptor != NULL && taskDescriptor->status == RUNNING) {
             String instruction;
             if (fgets(instruction, sizeof(instruction), taskDescriptor->task.taskFile) != NULL) {
-                roundRobin->totalCPUClocks+= UT;
-                taskDescriptor->cpuTime+= UT;
+                roundRobin->totalCPUClocks += UT;
+                taskDescriptor->cpuTime += UT;
 
                 Instruction instructionType = determineInstructionType(instruction);
 
@@ -354,7 +367,6 @@ int executeInstruction(TaskDescriptorQueue* queue, RoundRobin* roundRobin, TaskD
     }
     return roundRobin->preemptionTimeCounter;
 }
-
 
 void initializeRoundRobin(RoundRobin* roundRobin) {
     roundRobin->totalCPUClocks = 0;

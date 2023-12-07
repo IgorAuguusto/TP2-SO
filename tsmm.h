@@ -4,11 +4,6 @@
 #define TRUE 1
 #define FALSE 0
 
-//Formatações
-#define NEW_LINE "\n"
-#define EMPTY_LINE "\n\n"
-#define TAB '\t'
-
 // Unidade de tempo: equivale à 1 instrução da tarefa.
 #define UT 1
 
@@ -52,12 +47,13 @@
 #define INSTRUCTION_IDEX_REGEX "^[a-zA-Z_][a-zA-Z0-9_]*\\s*\\[[0-9]+\\]\\s*$"
 
 // Mensagens de erros
-#define DIVERGET_INSTRUCTION_ERROR "A tarefa %s não será executada, pois tem instruções diferentes do tipo 1, 2 e 3."
-#define INVALID_ARGUMENTS_ERROR "O Programa foi abortado, número de argumentos inválidos"
-#define MEMORY_ACCESS_ERROR "A tarefa %s foi abortada, pois tentou realizar um acesso inválido à memória: %s[%d]"
-#define UNDECLARED_IDENTIFIER_ERROR "A tarefa %s foi abortada, pois tentou acessar o identificador (%s) que não foi declarado."
-#define FILE_OPEN_ERROR "Falha em abrir o arquivo: (%s)"
-#define IDENTIFY_ALREADY_DECLARED "A tarefa %s foi abortada, pois tentou criar um identificador (%s) já declarado."
+#define DIVERGET_INSTRUCTION_ERROR "\nA tarefa %s não será executada, pois tem instruções diferentes do tipo 1, 2 e 3."
+#define INVALID_ARGUMENTS_ERROR "\nO Programa foi abortado, número de argumentos inválidos"
+#define MEMORY_ACCESS_ERROR "\nA tarefa %s foi abortada, pois tentou realizar um acesso inválido à memória: %s[%d]"
+#define UNDECLARED_IDENTIFIER_ERROR "\nA tarefa %s foi abortada, pois tentou acessar o identificador (%s) que não foi declarado."
+#define FILE_OPEN_ERROR "\nFalha em abrir o arquivo: (%s)"
+#define IDENTIFY_ALREADY_DECLARED_ERROR "\nA tarefa %s foi abortada, pois tentou criar um identificador (%s) já declarado."
+#define ALLOCATION_SPACE_ERROR "\nA tarefa %s foi abortada, pois excedeu o tamanho maximo de alocação da memória reservada (%d) bytes"
 
 
 // Extensão do arquivo
@@ -166,8 +162,14 @@ typedef struct {
     // Quantidade de váriaveis
     unsigned short quantityVariables;
 
+    // Quantidade de acessos
+    unsigned short quantityAccesses;
+
     // Campo que representa a páginação
     Pagination pagination;
+
+    // Acessos a memoria
+    Variable accesses[MAXIMUN_NUMBER_OF_VARIABLES];
 
     // Variaveis da tarefa
     Variable variable[MAXIMUN_NUMBER_OF_VARIABLES];
@@ -236,5 +238,6 @@ boolean matchRegex(String string, const char *pattern);
 boolean validateNumberOfArguments(int numberOfArguments);
 void initializeTaskDescriptor(TaskDescriptor* descriptor, String taskName);
 boolean validateFile(FileName fileName);
+void printTaskMemoryAccesses(TaskDescriptor taskDesc);
 int tsmm(int numberOfTasks, char *tasks[]);
 int main(int argc, char *argv[]);
