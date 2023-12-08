@@ -715,6 +715,7 @@ boolean validateFile(FileName fileName) {
 
     if (fgets(line, sizeof(line), file) != NULL) {
         if (!matchRegex(line, INSTRUCTION_HEADER_REGEX)) {
+            fclose(file);
             return FALSE;
         }
     }
@@ -722,6 +723,7 @@ boolean validateFile(FileName fileName) {
     while (fgets(line, sizeof(line), file) != NULL) {
         if (!matchRegex(line, INSTRUCTION_NEW_REGEX) && !matchRegex(line, INSTRUCTION_IDEX_REGEX) && 
             !matchRegex(line, INSTRUCTION_READ_DISK_REGEX)) {
+            fclose(file);
             return FALSE;
         }
     }
