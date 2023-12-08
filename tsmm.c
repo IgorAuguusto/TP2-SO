@@ -758,8 +758,8 @@ int tsmm(int numberOfTasks, char *tasks[]) {
         }
     }
     roundRobin = scheduleTasks(tasksDescriptions, numberOfTasks - 1);
-    printRoundRobin(roundRobin, numberOfTasksPerformedSuccessfully(tasksDescriptions, numberOfTasks));
-    printTasks(tasksDescriptions, numberOfTasks, roundRobin);
+    printRoundRobin(roundRobin, numberOfTasksPerformedSuccessfully(tasksDescriptions, numberOfTasks -1));
+    printTasks(tasksDescriptions, numberOfTasks -1, roundRobin);
     return EXIT_SUCCESS;
 }//tsmm()
 
